@@ -1,51 +1,55 @@
-provider "aws" {
-    region = "us-east-1"
+module "vpc" {
+  source         = "./modules/vpc"
+  vpc_cidr       = var.vpc_cidr
+  public_subnets = var.public_subnets
+  private_subnets = var.private_subnets
+  azs            = var.azs
+  env            = var.env
 }
 
-resource "aws_instance" "web" {
-    ami = var.ami_id
-    instance_type = var.instance_type
-
-    vpc_security_group_ids = [aws_security_group.nginx_sg.id]
-
-    user_data = <<-EOF
-                #!/bin/bash
-                sudo apt update -y
-                sudo apt install nginx -y
-                sudo systemctl start nginx
-                sudo systemctl enable nginx
-                EOF
-
-    tags = {
-        Name = "nginx-server"
-    }
+module "ec2" {
+  source       = "./modules/ec2"
+  vpc_id       = module.vpc.vpc_id
+  subnet_ids   = module.vpc.public_subnets
+  instance_type = var.instance_type
+  ami_id        = var.ami_id
+  key_name      = var.key_name
+  env           = var.env
 }
 
-resource "aws_security_group" "nginx_sg" {
-    name = "nginx-sg"
-    description = "Allow HTTP and SSH"
+module "rds" {
+  source       = "./modules/rds"
+  subnet_ids   = module.vpc.private_subnets
+  db_name      = var.db_name
+  username     = var.db_username
+  password     = var.db_password
+  env          = var.env
+}
 
-    ingress {
-        description = "SSH"
-        from_port = 22
-        to_port = 22
-        protocol = "TCP"
-        cidr_blocks = ["0.0.0.0/0"]
-    }
+module "s3" {
+  source      = "./modules/s3"
+  bucket_name = var.s3_bucket_name
+  env         = var.env
+}
 
-    ingress {
-        description = "HTTP"
-        from_port = 80
-        to_port = 80
-        protocol = "TCP"
-        cidr_blocks = ["0.0.0.0/0"]
-    }
+module "dynamodb" {
+  source     = "./modules/dynamodb"
+  table_name = var.dynamodb_table_name
+  hash_key   = var.dynamodb_hash_key
+  env        = var.env
+}
 
-    egress {
-        description = "HTTP"
-        from_port = 0
-        to_port = 0
-        protocol = "-1"
-        cidr_blocks = ["0.0.0.0/0"]
-    }
+module "lambda" {
+  source           = "./modules/lambda"
+  handler          = var.lambda_handler
+  runtime          = var.lambda_runtime
+  filename         = var.lambda_filename
+  env_variables    = var.lambda_env_variables
+  env              = var.env
+}
+
+module "sns" {
+  source      = "./modules/sns"
+  topic_name  = var.sns_topic_name
+  env         = var.env
 }
